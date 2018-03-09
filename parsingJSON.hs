@@ -45,4 +45,3 @@ main = do
   let parsedResponse = decode response :: Maybe [Person]
   let youngPeople = Prelude.filter under25YO $ fromJust parsedResponse
   print youngPeople
-  
