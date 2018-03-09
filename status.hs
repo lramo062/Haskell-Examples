@@ -1,48 +1,59 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
-
-import qualified Data.ByteString.Lazy as B
-import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy.Char8 as L8
+import Data.ByteString.Internal as BS
 import Network.HTTP.Client
+import Network.HTTP.Client.TLS
+import Network.HTTP.Types.Status  (statusCode)
+import qualified Data.HashMap.Strict as M
 import Data.Aeson
 import Data.Text
 import GHC.Generics
 import Data.Maybe
+import Data.Typeable
 
 -- define necessary data types
 data Metric = Metric { metric_status :: !Text } deriving (Show,Generic) 
 data Group = Group { slug :: !Text, status :: Metric } deriving (Show,Generic)
 
 instance FromJSON Metric
-instance ToJSON Metric
 instance FromJSON Group
-instance ToJSON Group
 
 request_url :: String
-request_url = "http://bakery-server.apps.mia.ulti.io/graphql?"
+request_url = "URL_GOES_HERE"
 
 request_method :: BS.ByteString
 request_method = "POST"
 
--- helper functions
-buildRequest :: String -> RequestBody -> IO Request
-buildRequest url body = do
-  nakedRequest <- parseRequest url
-  return (nakedRequest { method = request_method, requestBody = body })
+request_query :: String
+request_query = "query {groups {slug metrics { status } } }"
 
-send :: String -> RequestBody -> IO ()
-send url s = do
-  manager <- newManager defaultManagerSettings
-  request <- buildRequest url s
-  response <- httpLbs request manager
-  print (responseBody response)
-  -- let Just obj = decode (responseBody response)
-  -- print (obj :: Object)
+request_headers = [("Content-Type", "application/json; charset=utf-8")]
 
+(^?) :: Value -> Text -> Maybe Value
+(^?) (Object obj) k = M.lookup k obj
+(^?) _ _ = Nothing
+  
 -- entry point
+main :: IO ()
 main = do
-  send request_url  "--data { query { groups { slug, metrics { status }}}}"
-  print "TEst"
+    manager <- newManager tlsManagerSettings
+    -- Create the request
+    let requestObject = object
+            [ "query" .= request_query
+            ]
+    initialRequest <- parseRequest request_url
+    let request = initialRequest
+            { method = request_method
+            , requestBody = RequestBodyLBS $ encode requestObject
+            , requestHeaders = request_headers }
+    response <- httpLbs request manager
+    putStrLn $ "The status code was: "
+            ++ show (statusCode $ responseStatus response)
+    let json = decode (responseBody response) :: Maybe Value
+    let groups = (fromJust (fromJust json ^? "data") ^? "groups")
+    print groups
+    
   -- creating JSON data
   -- let group1 = Group "group1" $ Metric "red"
   -- let group2 = Group "group2" $ Metric "green"
